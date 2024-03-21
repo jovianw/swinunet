@@ -1,0 +1,8 @@
+einops
+numpy
+PyYAML
+scipy
+timm
+torch
+tqdm
+yacs
