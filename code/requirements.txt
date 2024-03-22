@@ -4,5 +4,6 @@ PyYAML
 scipy
 timm
 torch
+torchvision
 tqdm
 yacs

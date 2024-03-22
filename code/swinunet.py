@@ -6,6 +6,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.nn.modules.loss import CrossEntropyLoss
 from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms.v2 import (
+    Compose,
+    RandomHorizontalFlip,
+    RandomVerticalFlip,
+    RandomRotation,
+)
 from tqdm import tqdm
 from utils import DiceLoss
 from timeit import default_timer as timer
@@ -62,7 +68,7 @@ config = get_config(args2)
 
 # Define Dataset
 class NiftiDataset(Dataset):
-    def __init__(self, slices_dir, clip=None, transform=None):
+    def __init__(self, slices_dir, clip=-1, transform=None):
         self.slices_dir = slices_dir
         self.transform = transform
         self.filenames = [f for f in os.listdir(slices_dir) if f.endswith(".npz")]
@@ -81,6 +87,15 @@ class NiftiDataset(Dataset):
         image = torch.tensor(image, dtype=torch.float32)
         label = torch.tensor(label, dtype=torch.long)
 
+        # Apply transformations
+        if self.transform:
+            # Apply the transformations to both images simultaneously:
+            merged_images = torch.cat((image.unsqueeze(0), label.unsqueeze(0)), 0)
+            transformed_images = self.transform(merged_images)
+            # Get the transformed images:
+            image = transformed_images[0]
+            label = transformed_images[1]
+
         sample = {"image": image, "label": label}
         if self.transform:
             sample = self.transform(sample)
@@ -96,8 +111,15 @@ max_epoch = args.max_epoch
 patience = args.patience
 
 # Initialize dataloaders
-db_train = NiftiDataset(train_dir, args.clip)
-db_val = NiftiDataset(val_dir, args.clip)
+transforms = Compose(
+    [
+        RandomHorizontalFlip(),
+        RandomVerticalFlip(),
+        RandomRotation(degrees=10),  # You can adjust the degree of rotation
+    ]
+)
+db_train = NiftiDataset(train_dir, clip=args.clip, transform=transforms)
+db_val = NiftiDataset(val_dir, clip=args.clip)
 print("The length of train set is: {}".format(len(db_train)))
 print("The length of val set is: {}".format(len(db_val)))
 
@@ -220,12 +242,14 @@ for epoch_num in iterator:
         break
 
     # Save occasionally
-    if epoch_num + 1 % 50 == 0:
+    if epoch_num + 1 % 10 == 0:
         save_history_path = os.path.join(
-            snapshot_dir, "epoch_" + str(epoch_num) + "_history.npz"
+            snapshot_dir, "epoch_" + str(epoch_num) + "_regular_history.npz"
         )
         np.savez_compressed(save_history_path, history=history)
-        save_model_path = os.path.join(snapshot_dir, "epoch_" + str(epoch_num) + ".pth")
+        save_model_path = os.path.join(
+            snapshot_dir, "epoch_" + str(epoch_num) + "_regular.pth"
+        )
         torch.save(model.state_dict(), save_model_path)
         print(f"Saved model to {save_model_path}")
 iterator.close()
